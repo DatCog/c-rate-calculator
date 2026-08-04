@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Battery C-Rate to Max Current Calculator & Thermal Safety Guide</title>
+  <meta name="description" content="Calculate maximum continuous discharge current (Amps) from battery C-Rate and capacity (Ah), with integrated BMS thermal safety guidelines.">
+  
+  <!-- Tailwind CSS via CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", Helvetica, Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    input::-webkit-outer-spin-button,
+    input::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+    input[type=number] {
+      -moz-appearance: textfield;
+    }
+  </style>
+</head>
+<body class="bg-[#f5f5f7] text-[#1d1d1f] min-h-screen flex flex-col justify-between selection:bg-[#0071e3] selection:text-white">
+
+  <!-- Main Container -->
+  <div class="max-w-5xl mx-auto w-full px-4 sm:px-6 py-10 my-auto">
+    
+    <!-- Header -->
+    <header class="text-center mb-10">
+      <div class="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-white border border-black/5 shadow-sm mb-4 text-[#0071e3]">
+        <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M13 10V3L4 14h7v7l9-11h-7z" />
+        </svg>
+      </div>
+      <h1 class="text-3xl sm:text-4xl font-semibold tracking-tight text-[#1d1d1f]">
+        Battery C-Rate & Thermal Safety Calculator
+      </h1>
+      <p class="text-base text-[#86868b] mt-2 max-w-xl mx-auto font-normal">
+        Determine max continuous discharge current, peak current limits, runtime, and BMS thermal safety guidelines for custom battery systems.
+      </p>
+    </header>
+
+    <!-- Grid Layout -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+      
+      <!-- Input Controls (Left Column) -->
+      <section class="lg:col-span-5 bg-white border border-black/5 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6">
+        <h2 class="text-lg font-semibold tracking-tight text-[#1d1d1f] border-b border-gray-100 pb-3 flex items-center justify-between">
+          <span>Pack Parameters</span>
+          <span class="text-xs font-normal text-[#86868b] uppercase tracking-wider">Step 1</span>
+        </h2>
+
+        <!-- Battery Capacity -->
+        <div>
+          <label class="block text-xs font-semibold text-[#86868b] uppercase tracking-wider mb-2">
+            Battery Nominal Capacity (Ah)
+          </label>
+          <div class="relative">
+            <input 
+              type="number" 
+              id="capacity" 
+              value="100" 
+              min="0.1" 
+              step="any"
+              placeholder="100" 
+              class="w-full bg-[#f5f5f7] border border-transparent focus:border-[#0071e3] focus:bg-white text-[#1d1d1f] text-sm rounded-xl px-4 py-3 outline-none transition-all duration-200"
+              oninput="calculate()"
+            >
+            <span class="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-medium text-[#86868b]">Ah</span>
+          </div>
+        </div>
+
+        <!-- Continuous C-Rate Input & Slider -->
+        <div>
+          <div class="flex justify-between items-center mb-2">
+            <label class="text-xs font-semibold text-[#86868b] uppercase tracking-wider">
+              Continuous C-Rate Rating
+            </label>
+            <span id="cRateValueDisplay" class="text-xs font-bold text-[#0071e3]">1.0 C</span>
+          </div>
+          <div class="space-y-3">
+            <div class="relative">
+              <input 
+                type="number" 
+                id="cRateInput" 
+                value="1" 
+                min="0.1" 
+                max="20" 
+                step="0.1" 
+                placeholder="1.0" 
+                class="w-full bg-[#f5f5f7] border border-transparent focus:border-[#0071e3] focus:bg-white text-[#1d1d1f] text-sm rounded-xl px-4 py-3 outline-none transition-all duration-200"
+                oninput="syncCRateFromInput()"
+              >
+              <span class="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-medium text-[#86868b]">C</span>
+            </div>
+            <input 
+              type="range" 
+              id="cRateSlider" 
+              min="0.1" 
+              max="10" 
+              value="1" 
+              step="0.1" 
+              class="w-full h-1.5 bg-[#e5e5ea] rounded-lg appearance-none cursor-pointer accent-[#0071e3]"
+              oninput="syncCRateFromSlider()"
+            >
+            <div class="flex justify-between text-[10px] text-[#86868b]">
+              <span>0.1C (Low)</span>
+              <span>1.0C (Standard)</span>
+              <span>5.0C (High)</span>
+              <span>10C (Extreme)</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Peak / Burst C-Rate Rating -->
+        <div>
+          <label class="block text-xs font-semibold text-[#86868b] uppercase tracking-wider mb-2">
+            Peak / Burst C-Rate Rating (C)
+          </label>
+          <div class="relative">
+            <input 
+              type="number" 
+              id="peakCRate" 
+              value="2" 
+              min="0.1" 
+              step="0.1" 
+              placeholder="2.0" 
+              class="w-full bg-[#f5f5f7] border border-transparent focus:border-[#0071e3] focus:bg-white text-[#1d1d1f] text-sm rounded-xl px-4 py-3 outline-none transition-all duration-200"
+              oninput="calculate()"
+            >
+            <span class="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-medium text-[#86868b]">C (&lt;10s)</span>
+          </div>
+        </div>
+
+        <!-- Ambient Temperature -->
+        <div>
+          <label class="block text-xs font-semibold text-[#86868b] uppercase tracking-wider mb-2">
+            Ambient Operating Temperature (°C)
+          </label>
+          <div class="relative">
+            <input 
+              type="number" 
+              id="tempCelsius" 
+              value="25" 
+              min="-20" 
+              max="80" 
+              placeholder="25" 
+              class="w-full bg-[#f5f5f7] border border-transparent focus:border-[#0071e3] focus:bg-white text-[#1d1d1f] text-sm rounded-xl px-4 py-3 outline-none transition-all duration-200"
+              oninput="calculate()"
+            >
+            <span id="tempFahrenheitDisplay" class="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-medium text-[#86868b]">°C / 77°F</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Output & Engineering Cards (Right Column) -->
+      <div class="lg:col-span-7 space-y-6">
+        
+        <!-- Output Summary Card -->
+        <section class="bg-white border border-black/5 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6">
+          <div class="flex items-center justify-between border-b border-gray-100 pb-3">
+            <h2 class="text-lg font-semibold tracking-tight text-[#1d1d1f]">Calculated Output Limits</h2>
+            <div id="thermalBadge" class="text-xs font-semibold px-3 py-1 rounded-full transition-all duration-200">
+              Low Thermal Impact
+            </div>
+          </div>
+
+          <!-- Highlight Output Card: Max Continuous Current -->
+          <div class="p-5 rounded-2xl bg-gradient-to-br from-[#0071e3]/5 to-[#0071e3]/10 border border-[#0071e3]/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div>
+              <span class="text-xs font-semibold text-[#0071e3] uppercase tracking-wider block mb-1">
+                Max Continuous Discharge Current
+              </span>
+              <p class="text-xs text-[#86868b]">
+                Safe continuous load capability without triggering thermal cutoff.
+              </p>
+            </div>
+            <div class="text-left sm:text-right">
+              <div id="maxCurrentDisplay" class="text-3xl sm:text-4xl font-bold text-[#0071e3]">
+                100 A
+              </div>
+              <span id="deratedTag" class="text-[11px] font-medium text-[#86868b]">
+                100% Thermal Rating
+              </span>
+            </div>
+          </div>
+
+          <!-- Key Metrics Cards Grid -->
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
+            
+            <!-- Peak Burst Current -->
+            <div class="bg-[#f5f5f7] p-4 rounded-2xl">
+              <span class="text-xs font-medium text-[#86868b] uppercase tracking-wider block mb-1">Peak Burst Current</span>
+              <div class="text-xl sm:text-2xl font-semibold tracking-tight text-[#1d1d1f]">
+                <span id="peakCurrentDisplay">200</span><span class="text-sm font-normal text-[#86868b] ml-1">A</span>
+              </div>
+              <div class="text-[11px] text-[#86868b] font-medium mt-1">
+                Limit &lt;10 Sec Duration
+              </div>
+            </div>
+
+            <!-- Run Time at Max Draw -->
+            <div class="bg-[#f5f5f7] p-4 rounded-2xl">
+              <span class="text-xs font-medium text-[#86868b] uppercase tracking-wider block mb-1">Theoretical Runtime</span>
+              <div class="text-xl sm:text-2xl font-semibold tracking-tight text-[#1d1d1f]">
+                <span id="runtimeDisplay">60</span><span id="runtimeUnit" class="text-sm font-normal text-[#86868b] ml-1">min</span>
+              </div>
+              <div class="text-[11px] text-[#86868b] font-medium mt-1">
+                At 100% Continuous Load
+              </div>
+            </div>
+
+            <!-- Recommended Fuse -->
+            <div class="bg-[#f5f5f7] p-4 rounded-2xl col-span-2 sm:col-span-1">
+              <span class="text-xs font-medium text-[#86868b] uppercase tracking-wider block mb-1">Main Fuse Rating</span>
+              <div class="text-xl sm:text-2xl font-semibold tracking-tight text-[#1d1d1f]">
+                <span id="fuseDisplay">125</span><span class="text-sm font-normal text-[#86868b] ml-1">A</span>
+              </div>
+              <div class="text-[11px] text-[#86868b] font-medium mt-1">
+                125% NEC Safety Standard
+              </div>
+            </div>
+
+          </div>
+        </section>
+
+        <!-- Dynamic Engineering & Thermal Safety Card -->
+        <section class="bg-white border border-black/5 rounded-3xl p-6 sm:p-8 shadow-sm">
+          <h2 class="text-lg font-semibold tracking-tight text-[#1d1d1f] border-b border-gray-100 pb-3 mb-4 flex items-center gap-2">
+            <svg class="w-5 h-5 text-[#0071e3]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            Thermal Management &amp; Safety Advisory
+          </h2>
+
+          <div id="insightsContainer" class="space-y-3 text-xs leading-relaxed">
+            <!-- Dynamic alerts populate via JS -->
+          </div>
+        </section>
+
+      </div>
+
+    </div>
+
+    <!-- Related Engineering Tools Navigation Section -->
+    <section class="mt-12 bg-white border border-black/5 rounded-3xl p-6 sm:p-8 shadow-sm">
+      <h3 class="text-sm font-semibold text-[#86868b] uppercase tracking-wider mb-4 border-b border-gray-100 pb-3">
+        Related Battery Engineering Calculators
+      </h3>
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs font-medium">
+        <a href="https://your-vercel-domain.vercel.app/discharge-calculator" class="p-4 rounded-2xl bg-[#f5f5f7] hover:bg-[#e5e5ea] text-[#1d1d1f] transition-all duration-200 flex items-center justify-between group">
+          <span>Battery Discharge Time Calculator</span>
+          <span class="text-[#0071e3] group-hover:translate-x-1 transition-transform">→</span>
+        </a>
+        <a href="https://your-vercel-domain.vercel.app/series-parallel-configurator" class="p-4 rounded-2xl bg-[#f5f5f7] hover:bg-[#e5e5ea] text-[#1d1d1f] transition-all duration-200 flex items-center justify-between group">
+          <span>Series &amp; Parallel Wire Size Configurator</span>
+          <span class="text-[#0071e3] group-hover:translate-x-1 transition-transform">→</span>
+        </a>
+        <a href="https://your-vercel-domain.vercel.app/lead-acid-to-lithium" class="p-4 rounded-2xl bg-[#f5f5f7] hover:bg-[#e5e5ea] text-[#1d1d1f] transition-all duration-200 flex items-center justify-between group">
+          <span>Lead-Acid to LiFePO4 Upgrade Calculator</span>
+          <span class="text-[#0071e3] group-hover:translate-x-1 transition-transform">→</span>
+        </a>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- Footer Disclaimer -->
+  <footer class="text-center py-8 px-4 border-t border-black/5 mt-10">
+    <p class="text-xs text-[#86868b] max-w-2xl mx-auto leading-relaxed">
+      <strong>Disclaimer:</strong> Always verify cell manufacturer datasheets for continuous vs. peak C-Rate temperature curves. Calculations are theoretical estimates for system sizing.
+    </p>
+  </footer>
+
+  <!-- Interactive JavaScript Logic -->
+  <script>
+    function syncCRateFromSlider() {
+      const sliderVal = document.getElementById('cRateSlider').value;
+      document.getElementById('cRateInput').value = sliderVal;
+      document.getElementById('cRateValueDisplay').textContent = `${parseFloat(sliderVal).toFixed(1)} C`;
+      calculate();
+    }
+
+    function syncCRateFromInput() {
+      const inputVal = parseFloat(document.getElementById('cRateInput').value) || 0;
+      document.getElementById('cRateSlider').value = Math.min(10, Math.max(0.1, inputVal));
+      document.getElementById('cRateValueDisplay').textContent = `${inputVal.toFixed(1)} C`;
+      calculate();
+    }
+
+    function calculate() {
+      const capacity = parseFloat(document.getElementById('capacity').value) || 0;
+      const cRate = parseFloat(document.getElementById('cRateInput').value) || 0;
+      const peakCRate = parseFloat(document.getElementById('peakCRate').value) || 0;
+      const tempC = parseFloat(document.getElementById('tempCelsius').value);
+
+      // DOM Elements
+      const maxCurrentDisplay = document.getElementById('maxCurrentDisplay');
+      const peakCurrentDisplay = document.getElementById('peakCurrentDisplay');
+      const runtimeDisplay = document.getElementById('runtimeDisplay');
+      const runtimeUnit = document.getElementById('runtimeUnit');
+      const fuseDisplay = document.getElementById('fuseDisplay');
+      const thermalBadge = document.getElementById('thermalBadge');
+      const deratedTag = document.getElementById('deratedTag');
+      const tempFDisplay = document.getElementById('tempFahrenheitDisplay');
+      const insightsContainer = document.getElementById('insightsContainer');
+
+      // Update Fahrenheit display
+      if (!isNaN(tempC)) {
+        const tempF = Math.round((tempC * 9/5) + 32);
+        tempFDisplay.textContent = `°C / ${tempF}°F`;
+      } else {
+        tempFDisplay.textContent = `°C`;
+      }
+
+      // Validation
+      if (capacity <= 0 || cRate <= 0) {
+        maxCurrentDisplay.textContent = "0 A";
+        peakCurrentDisplay.textContent = "0";
+        runtimeDisplay.textContent = "0";
+        fuseDisplay.textContent = "0";
+        thermalBadge.textContent = "Invalid Parameters";
+        thermalBadge.className = "text-xs font-semibold px-3 py-1 rounded-full bg-gray-200 text-gray-700";
+        insightsContainer.innerHTML = `<div class="p-3.5 rounded-xl bg-red-50 text-red-700 font-medium">Please enter valid positive values for battery capacity and C-rate.</div>`;
+        return;
+      }
+
+      // Base Calculations
+      let maxContinuousCurrent = capacity * cRate;
+      const peakCurrent = capacity * peakCRate;
+      
+      // Calculate Temperature Derating if Ambient Temp > 40°C
+      let deratingFactor = 1.0;
+      if (tempC > 40) {
+        // Derate linearly: 1.5% per degree above 40°C, max 50% derate
+        const extraTemp = tempC - 40;
+        deratingFactor = Math.max(0.5, 1.0 - (extraTemp * 0.015));
+      }
+
+      const effectiveMaxCurrent = maxContinuousCurrent * deratingFactor;
+      const suggestedFuse = Math.ceil(effectiveMaxCurrent * 1.25);
+
+      // Theoretical Runtime in minutes
+      const runtimeMinutes = (60 / cRate);
+
+      // UI Displays
+      maxCurrentDisplay.textContent = `${Math.round(effectiveMaxCurrent).toLocaleString()} A`;
+      peakCurrentDisplay.textContent = Math.round(peakCurrent).toLocaleString();
+      fuseDisplay.textContent = suggestedFuse.toLocaleString();
+
+      if (runtimeMinutes >= 60) {
+        runtimeDisplay.textContent = (runtimeMinutes / 60).toFixed(1);
+        runtimeUnit.textContent = "hrs";
+      } else {
+        runtimeDisplay.textContent = Math.round(runtimeMinutes);
+        runtimeUnit.textContent = "min";
+      }
+
+      if (deratingFactor < 1.0) {
+        deratedTag.textContent = `Derated by ${Math.round((1 - deratingFactor) * 100)}% (High Temp)`;
+        deratedTag.className = "text-[11px] font-semibold text-amber-600";
+      } else {
+        deratedTag.textContent = "100% Full Thermal Capacity";
+        deratedTag.className = "text-[11px] font-medium text-[#86868b]";
+      }
+
+      // Thermal Risk Rating Logic
+      let thermalImpactScore = cRate;
+      if (tempC > 35) thermalImpactScore += 0.5;
+      if (tempC > 45) thermalImpactScore += 1.0;
+
+      if (thermalImpactScore <= 0.8) {
+        thermalBadge.textContent = "Low Thermal Stress";
+        thermalBadge.className = "text-xs font-semibold px-3 py-1 rounded-full bg-emerald-100 text-emerald-800";
+      } else if (thermalImpactScore <= 1.5) {
+        thermalBadge.textContent = "Moderate Heat Generation";
+        thermalBadge.className = "text-xs font-semibold px-3 py-1 rounded-full bg-blue-100 text-blue-800";
+      } else if (thermalImpactScore <= 3.0) {
+        thermalBadge.textContent = "High Thermal Load";
+        thermalBadge.className = "text-xs font-semibold px-3 py-1 rounded-full bg-amber-100 text-amber-800";
+      } else {
+        thermalBadge.textContent = "Critical Thermal Stress";
+        thermalBadge.className = "text-xs font-semibold px-3 py-1 rounded-full bg-red-100 text-red-800";
+      }
+
+      // Dynamic Engineering Insights
+      let insightsHTML = '';
+
+      // Insight 1: High C-Rate Warning
+      if (cRate > 1.5) {
+        insightsHTML += `
+          <div class="p-3.5 rounded-xl bg-amber-50 border border-amber-200/60 text-amber-900 flex items-start gap-3">
+            <span class="text-amber-600 font-bold text-base leading-none mt-0.5">🔥</span>
+            <div>
+              <strong class="font-semibold">High Thermal Stress (&gt;1.5C):</strong> 
+              <span>Operating continuously at ${cRate.toFixed(1)}C generates significant internal resistance heat ($I^2R$ loss). Active liquid cooling or forced-air cooling channels are strongly recommended to prevent premature degradation.</span>
+            </div>
+          </div>
+        `;
+      } else {
+        insightsHTML += `
+          <div class="p-3.5 rounded-xl bg-[#f5f5f7] border border-black/5 flex items-start gap-3">
+            <span class="text-emerald-500 font-bold text-base leading-none mt-0.5">•</span>
+            <div>
+              <strong class="font-semibold text-[#1d1d1f]">Manageable Thermal Profile (&le;1.5C):</strong> 
+              <span>Continuous discharge within conservative C-rate limits minimizes internal heat accumulation. Passive air convection is typically adequate for properly spaced packs.</span>
+            </div>
+          </div>
+        `;
+      }
+
+      // Insight 2: Ambient Temperature & Derating Notice
+      if (!isNaN(tempC) && tempC > 40) {
+        insightsHTML += `
+          <div class="p-3.5 rounded-xl bg-red-50 border border-red-200/60 text-red-900 flex items-start gap-3">
+            <span class="text-red-600 font-bold text-base leading-none mt-0.5">⚠️</span>
+            <div>
+              <strong class="font-semibold">Temperature Derating Active (${tempC}°C / ${Math.round((tempC * 9/5) + 32)}°F):</strong> 
+              <span>High ambient temperatures severely reduce battery thermal headroom. Continuous current output has been automatically derated by ${Math.round((1 - deratingFactor) * 100)}% to prevent triggering BMS thermal shutdowns.</span>
+            </div>
+          </div>
+        `;
+      } else if (!isNaN(tempC) && tempC < 0) {
+        insightsHTML += `
+          <div class="p-3.5 rounded-xl bg-blue-50 border border-blue-200/60 text-blue-900 flex items-start gap-3">
+            <span class="text-blue-600 font-bold text-base leading-none mt-0.5">❄️</span>
+            <div>
+              <strong class="font-semibold">Sub-Zero Ambient Conditions (${tempC}°C):</strong> 
+              <span>Discharge is possible but capacity will drop due to increased internal resistance. <strong>Never attempt to charge lithium cells below 0°C</strong> without self-heating pads.</span>
+            </div>
+          </div>
+        `;
+      } else {
+        insightsHTML += `
+          <div class="p-3.5 rounded-xl bg-[#f5f5f7] border border-black/5 flex items-start gap-3">
+            <span class="text-blue-500 font-bold text-base leading-none mt-0.5">•</span>
+            <div>
+              <strong class="font-semibold text-[#1d1d1f]">Optimal Operating Window (15°C - 35°C):</strong> 
+              <span>Ambient environment provides standard thermal dissipation headroom without requiring current derating.</span>
+            </div>
+          </div>
+        `;
+      }
+
+      // Insight 3: Safety Hardware & BMS Fuse Matching
+      insightsHTML += `
+        <div class="p-3.5 rounded-xl bg-[#f5f5f7] border border-black/5 flex items-start gap-3">
+          <span class="text-emerald-500 font-bold text-base leading-none mt-0.5">⚡</span>
+          <div>
+            <strong class="font-semibold text-[#1d1d1f]">Safety Hardware &amp; Fuse Sizing:</strong> 
+            <span>Pair this pack with a main fuse rated at 125% of continuous current (recommended <strong>${suggestedFuse}A Class T or ANL Fuse</strong>). Ensure your BMS discharge MOSFET rating exceeds ${Math.round(effectiveMaxCurrent)}A continuous.</span>
+          </div>
+        </div>
+      `;
+
+      insightsContainer.innerHTML = insightsHTML;
+    }
+
+    // Initial calculation on DOM Ready
+    document.addEventListener('DOMContentLoaded', calculate);
+  </script>
+
+</body>
+</html>
